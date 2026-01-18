@@ -4,13 +4,17 @@ import { useAuth } from '../context/AuthContext';
 import {
   getGroupById,
   getGroupMembers,
-  getTransactionsByGroup
+  getTransactionsByGroup,
+  updateExpense,
+  deleteExpense
 } from '../services/firestoreService';
 import Layout from '../components/Layout';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
+import Modal from '../components/Modal';
+import Input from '../components/Input';
 
 // Format currency in VND
 const formatCurrency = (amount) => {
@@ -62,7 +66,7 @@ const MemberList = ({ members }) => {
   );
 };
 
-const TransactionHistory = ({ transactions, members, selectedUserId, onUserChange }) => {
+const TransactionHistory = ({ transactions, members, selectedUserId, onUserChange, currentUserId, onEdit, onDelete }) => {
   // Sort transactions by date (newest first)
   const sortedTransactions = [...transactions].sort((a, b) => {
     const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
@@ -79,6 +83,11 @@ const TransactionHistory = ({ transactions, members, selectedUserId, onUserChang
   const getUserName = (userId) => {
     const member = members.find(m => m.userId === userId);
     return member?.userName || 'Unknown';
+  };
+
+  // Check if current user can edit/delete this transaction
+  const canModify = (transaction) => {
+    return transaction.userId === currentUserId;
   };
 
   return (
@@ -131,9 +140,29 @@ const TransactionHistory = ({ transactions, members, selectedUserId, onUserChang
                   -{formatCurrency(transaction.amount)}
                 </p>
               </div>
-              <p className="text-sm text-gray-500">
-                {formatDate(transaction.createdAt)}
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-500">
+                  {formatDate(transaction.createdAt)}
+                </p>
+                
+                {/* Edit/Delete buttons - only show for own transactions */}
+                {canModify(transaction) && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onEdit(transaction)}
+                      className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Sửa
+                    </button>
+                    <button
+                      onClick={() => onDelete(transaction)}
+                      className="text-sm text-red-600 hover:text-red-800 font-medium"
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -153,6 +182,14 @@ const GroupDetail = () => {
   const [selectedUserId, setSelectedUserId] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Edit/Delete modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     fetchGroupData();
@@ -191,6 +228,83 @@ const GroupDetail = () => {
 
   const handleUserFilterChange = (userId) => {
     setSelectedUserId(userId);
+  };
+
+  const handleEdit = (transaction) => {
+    setSelectedTransaction(transaction);
+    setEditAmount(transaction.amount.toString());
+    setEditDescription(transaction.description);
+    setShowEditModal(true);
+  };
+
+  const handleDelete = (transaction) => {
+    setSelectedTransaction(transaction);
+    setShowDeleteModal(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!selectedTransaction) return;
+    
+    try {
+      setActionLoading(true);
+      setError('');
+      
+      const amount = parseFloat(editAmount);
+      
+      if (isNaN(amount) || amount <= 0) {
+        setError('Số tiền không hợp lệ');
+        return;
+      }
+      
+      await updateExpense(
+        selectedTransaction.id,
+        user.userId,
+        groupId,
+        amount,
+        editDescription
+      );
+      
+      // Refresh data
+      await fetchGroupData();
+      
+      // Close modal
+      setShowEditModal(false);
+      setSelectedTransaction(null);
+      setEditAmount('');
+      setEditDescription('');
+    } catch (err) {
+      setError('Không thể cập nhật chi tiêu: ' + err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedTransaction) return;
+    
+    try {
+      setActionLoading(true);
+      setError('');
+      
+      await deleteExpense(
+        selectedTransaction.id,
+        user.userId,
+        groupId
+      );
+      
+      // Refresh data
+      await fetchGroupData();
+      
+      // Close modal
+      setShowDeleteModal(false);
+      setSelectedTransaction(null);
+    } catch (err) {
+      setError('Không thể xóa chi tiêu: ' + err.message);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   if (loading) {
@@ -245,7 +359,92 @@ const GroupDetail = () => {
         members={members}
         selectedUserId={selectedUserId}
         onUserChange={handleUserFilterChange}
+        currentUserId={user?.userId}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
       />
+
+      {/* Edit Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Sửa chi tiêu"
+      >
+        <form onSubmit={handleEditSubmit}>
+          <Input
+            label="Số tiền"
+            type="number"
+            name="amount"
+            value={editAmount}
+            onChange={(e) => setEditAmount(e.target.value)}
+            placeholder="Nhập số tiền"
+            required
+            disabled={actionLoading}
+          />
+          
+          <Input
+            label="Mô tả"
+            type="text"
+            name="description"
+            value={editDescription}
+            onChange={(e) => setEditDescription(e.target.value)}
+            placeholder="Nhập mô tả"
+            required
+            disabled={actionLoading}
+          />
+          
+          <div className="flex gap-3 mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              fullWidth
+              onClick={() => setShowEditModal(false)}
+              disabled={actionLoading}
+            >
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              fullWidth
+              disabled={actionLoading}
+            >
+              {actionLoading ? 'Đang lưu...' : 'Lưu'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title="Xác nhận xóa"
+      >
+        <p className="text-gray-700 mb-6">
+          Bạn có chắc chắn muốn xóa chi tiêu này không? Số dư của bạn sẽ được cập nhật lại.
+        </p>
+        
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            fullWidth
+            onClick={() => setShowDeleteModal(false)}
+            disabled={actionLoading}
+          >
+            Hủy
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            fullWidth
+            onClick={handleDeleteConfirm}
+            disabled={actionLoading}
+          >
+            {actionLoading ? 'Đang xóa...' : 'Xóa'}
+          </Button>
+        </div>
+      </Modal>
     </Layout>
   );
 };

@@ -507,3 +507,125 @@ export const createExpense = async (userId, groupId, amount, description) => {
     throw new Error(`Failed to create expense: ${error.message}`);
   }
 };
+
+
+/**
+ * Update transaction
+ * @param {string} transactionId 
+ * @param {Object} updates - {amount, description}
+ * @returns {Promise<void>}
+ */
+export const updateTransaction = async (transactionId, updates) => {
+  try {
+    const docRef = doc(db, 'transactions', transactionId);
+    await updateDoc(docRef, updates);
+  } catch (error) {
+    throw new Error(`Failed to update transaction: ${error.message}`);
+  }
+};
+
+/**
+ * Delete transaction
+ * @param {string} transactionId 
+ * @returns {Promise<void>}
+ */
+export const deleteTransaction = async (transactionId) => {
+  try {
+    await deleteDoc(doc(db, 'transactions', transactionId));
+  } catch (error) {
+    throw new Error(`Failed to delete transaction: ${error.message}`);
+  }
+};
+
+/**
+ * Get transaction by ID
+ * @param {string} transactionId 
+ * @returns {Promise<Object>}
+ */
+export const getTransactionById = async (transactionId) => {
+  try {
+    const docRef = doc(db, 'transactions', transactionId);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      throw new Error('Transaction not found');
+    }
+    
+    return { id: docSnap.id, ...docSnap.data() };
+  } catch (error) {
+    throw new Error(`Failed to get transaction: ${error.message}`);
+  }
+};
+
+/**
+ * Update expense (update transaction + adjust balance)
+ * @param {string} transactionId 
+ * @param {string} userId 
+ * @param {string} groupId 
+ * @param {number} newAmount 
+ * @param {string} newDescription 
+ * @returns {Promise<void>}
+ */
+export const updateExpense = async (transactionId, userId, groupId, newAmount, newDescription) => {
+  try {
+    // Get the original transaction
+    const originalTransaction = await getTransactionById(transactionId);
+    const oldAmount = originalTransaction.amount;
+    
+    // Get the member record
+    const member = await getMemberByGroupAndUser(groupId, userId);
+    
+    if (!member) {
+      throw new Error('User is not a member of this group');
+    }
+    
+    // Calculate balance adjustment
+    // If old amount was 100 and new amount is 150, balance should decrease by 50
+    // If old amount was 100 and new amount is 50, balance should increase by 50
+    const balanceAdjustment = oldAmount - newAmount;
+    const newBalance = member.balance + balanceAdjustment;
+    
+    // Update transaction
+    await updateTransaction(transactionId, {
+      amount: newAmount,
+      description: newDescription
+    });
+    
+    // Update member balance
+    await updateMemberBalance(member.id, newBalance);
+  } catch (error) {
+    throw new Error(`Failed to update expense: ${error.message}`);
+  }
+};
+
+/**
+ * Delete expense (delete transaction + restore balance)
+ * @param {string} transactionId 
+ * @param {string} userId 
+ * @param {string} groupId 
+ * @returns {Promise<void>}
+ */
+export const deleteExpense = async (transactionId, userId, groupId) => {
+  try {
+    // Get the transaction to get the amount
+    const transaction = await getTransactionById(transactionId);
+    
+    // Get the member record
+    const member = await getMemberByGroupAndUser(groupId, userId);
+    
+    if (!member) {
+      throw new Error('User is not a member of this group');
+    }
+    
+    // Restore balance (add back the expense amount)
+    const newBalance = member.balance + transaction.amount;
+    
+    // Delete transaction
+    await deleteTransaction(transactionId);
+    
+    // Update member balance
+    await updateMemberBalance(member.id, newBalance);
+  } catch (error) {
+    throw new Error(`Failed to delete expense: ${error.message}`);
+  }
+};
