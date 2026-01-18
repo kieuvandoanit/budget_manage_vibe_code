@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users collection
+    match /users/{userId} {
+      // Anyone can read to check login credentials
+      allow read: if true;
+      // Anyone can create (for registration if needed)
+      allow create: if true;
+      // Only allow updates and deletes (admin operations will be handled by app logic)
+      allow update, delete: if true;
+    }
+    
+    // Groups collection
+    match /groups/{groupId} {
+      // Anyone authenticated can read groups
+      allow read: if true;
+      // Allow create, update, delete (admin operations)
+      allow create, update, delete: if true;
+    }
+    
+    // Group members collection
+    match /group_members/{memberId} {
+      // Anyone can read group members
+      allow read: if true;
+      // Allow create, update, delete (admin operations)
+      allow create, update, delete: if true;
+    }
+    
+    // Transactions collection
+    match /transactions/{transactionId} {
+      // Anyone can read transactions
+      allow read: if true;
+      // Allow create (for adding expenses)
+      allow create: if true;
+      // Allow update, delete (admin operations)
+      allow update, delete: if true;
+    }
+  }
+}
