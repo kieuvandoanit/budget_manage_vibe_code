@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
+import NotFound from './components/NotFound';
 
 // Pages
 import Login from './pages/Login';
@@ -32,7 +33,9 @@ function App() {
           
           {/* Default Routes */}
           <Route path="/" element={<Navigate to="/groups" replace />} />
-          <Route path="*" element={<Navigate to="/groups" replace />} />
+          
+          {/* 404 - Not Found - Smart redirect based on auth status */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Router>
     </AuthProvider>
