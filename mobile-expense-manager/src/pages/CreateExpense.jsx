@@ -22,6 +22,14 @@ const CreateExpense = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // Format number with thousand separators
+  const formatAmount = (amount) => {
+    if (!amount || amount === '') return '';
+    const numericValue = parseFloat(amount);
+    if (isNaN(numericValue)) return '';
+    return numericValue.toLocaleString('vi-VN');
+  };
+
   // Handle input change
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -132,17 +140,25 @@ const CreateExpense = () => {
       <div className="bg-white rounded-lg shadow-md p-6">
         <form onSubmit={handleSubmit}>
           {/* Amount Input */}
-          <Input
-            label="Số tiền (VND)"
-            type="number"
-            name="amount"
-            value={formData.amount}
-            onChange={handleChange}
-            placeholder="Nhập số tiền"
-            error={errors.amount}
-            required
-            disabled={loading || success}
-          />
+          <div className="mb-4">
+            <Input
+              label="Số tiền (VND)"
+              type="number"
+              name="amount"
+              value={formData.amount}
+              onChange={handleChange}
+              placeholder="Nhập số tiền"
+              error={errors.amount}
+              required
+              disabled={loading || success}
+            />
+            {/* Amount hint */}
+            {formData.amount && !errors.amount && (
+              <p className="mt-1 text-sm text-gray-500 text-right">
+                {formatAmount(formData.amount)} VND
+              </p>
+            )}
+          </div>
 
           {/* Description Textarea */}
           <div className="mb-4">
